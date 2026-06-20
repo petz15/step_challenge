@@ -6,8 +6,6 @@ import { useAuth } from "@/lib/auth-context";
 import { api, ConversionRule } from "@/lib/api";
 import Nav from "@/components/Nav";
 
-const ACTIVITY_TYPES = ["Walking", "Running", "Hiking", "Cycling", "Climbing", "Strength", "Manual Steps"];
-
 function estimateSteps(
   activityType: string,
   duration: string,
@@ -27,7 +25,7 @@ export default function LogActivityPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [rules, setRules] = useState<ConversionRule[]>([]);
-  const [activityType, setActivityType] = useState("Walking");
+  const [activityType, setActivityType] = useState("");
   const [duration, setDuration] = useState("");
   const [distance, setDistance] = useState("");
   const [manualSteps, setManualSteps] = useState("");
@@ -42,7 +40,10 @@ export default function LogActivityPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user) api.getConversionRules().then(setRules).catch(() => {});
+    if (user) api.getConversionRules().then((r) => {
+      setRules(r);
+      if (r.length > 0) setActivityType((prev) => prev || r[0].activity_type);
+    }).catch(() => {});
   }, [user]);
 
   const preview = estimateSteps(activityType, duration, distance, manualSteps, rules);
@@ -94,7 +95,7 @@ export default function LogActivityPage() {
               onChange={(e) => { setActivityType(e.target.value); setDuration(""); setDistance(""); setManualSteps(""); }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {ACTIVITY_TYPES.map((t) => <option key={t}>{t}</option>)}
+              {rules.map((r) => <option key={r.activity_type}>{r.activity_type}</option>)}
             </select>
           </div>
 

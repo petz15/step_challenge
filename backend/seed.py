@@ -3,19 +3,9 @@
 import sys
 import random
 from datetime import date, timedelta
-from database import engine, SessionLocal, Base
+from database import SessionLocal
 import models
 from auth import hash_password
-
-DEFAULT_CONVERSION_RULES = [
-    {"activity_type": "Walking",      "conversion_per_minute": 1.0,  "conversion_per_km": 1250.0},
-    {"activity_type": "Running",      "conversion_per_minute": 2.5,  "conversion_per_km": 1500.0},
-    {"activity_type": "Hiking",       "conversion_per_minute": 50.0, "conversion_per_km": 2000.0},
-    {"activity_type": "Cycling",      "conversion_per_minute": 30.0, "conversion_per_km": 500.0},
-    {"activity_type": "Climbing",     "conversion_per_minute": 40.0, "conversion_per_km": 0.0},
-    {"activity_type": "Strength",     "conversion_per_minute": 20.0, "conversion_per_km": 0.0},
-    {"activity_type": "Manual Steps", "conversion_per_minute": 0.0,  "conversion_per_km": 0.0},
-]
 
 DEFAULT_USERS = [
     {"email": "peter@stepchallenge.local", "name": "Peter", "password": "peter123",
@@ -25,39 +15,31 @@ DEFAULT_USERS = [
 ]
 
 SAMPLE_ACTIVITIES = [
-    ("Walking", 45, None, None),
-    ("Running", 30, None, None),
-    ("Hiking", 90, None, None),
-    ("Cycling", 60, None, None),
-    ("Strength", 45, None, None),
-    ("Walking", None, 5.0, None),
-    ("Running", None, 8.0, None),
-    ("Manual Steps", None, None, 8000),
+    ("Walking, Moderate",              45,  None, None),
+    ("Running, Moderate (10 min/mile)", 30,  None, None),
+    ("Hiking",                          90,  None, None),
+    ("Cycling, Easy (10 mph)",          60,  None, None),
+    ("Weight Lifting",                  45,  None, None),
+    ("Walking, Moderate",             None,   5.0, None),
+    ("Running, Easy (12 min/mile)",   None,   8.0, None),
+    ("Manual Steps",                  None,  None, 8000),
 ]
 
 
 def seed(reset: bool = False):
     if reset:
-        print("Dropping all tables...")
-        Base.metadata.drop_all(bind=engine)
-        print("Recreating tables via Alembic...")
         from alembic.config import Config
         from alembic import command as alembic_cmd
         import os
         alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
         alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+        print("Dropping all tables via Alembic downgrade...")
+        alembic_cmd.downgrade(alembic_cfg, "base")
+        print("Recreating tables via Alembic upgrade...")
         alembic_cmd.upgrade(alembic_cfg, "head")
 
     db = SessionLocal()
     try:
-        # Conversion rules
-        existing_rules = db.query(models.ConversionRule).count()
-        if existing_rules == 0:
-            print("Seeding conversion rules...")
-            for rule_data in DEFAULT_CONVERSION_RULES:
-                db.add(models.ConversionRule(**rule_data, is_default=True))
-            db.commit()
-
         # Users
         existing_users = db.query(models.User).count()
         if existing_users == 0:
@@ -84,7 +66,6 @@ def seed(reset: bool = False):
             for user in users:
                 for i in range(30):
                     day = today - timedelta(days=i)
-                    # 1-2 random activities per day
                     for _ in range(random.randint(1, 2)):
                         act_type, dur, dist, manual = random.choice(SAMPLE_ACTIVITIES)
                         rule = rules.get(act_type)
