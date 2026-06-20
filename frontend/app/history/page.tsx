@@ -99,9 +99,12 @@ export default function HistoryPage() {
                 className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 group"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="font-medium text-gray-900">{a.activity_type}</span>
                     <span className="text-xs text-gray-400">{a.date}</span>
+                    {a.source === "garmin_api" && (
+                      <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">Garmin</span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-500 mt-0.5">
                     {a.duration_minutes && `${a.duration_minutes} min`}

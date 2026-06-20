@@ -18,6 +18,27 @@ export default function SettingsPage() {
   const [savingRule, setSavingRule] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState("");
   const [ruleMsg, setRuleMsg] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newPerMin, setNewPerMin] = useState("");
+  const [newPerKm, setNewPerKm] = useState("");
+  const [addingRule, setAddingRule] = useState(false);
+  const [addMsg, setAddMsg] = useState("");
+
+  // Garmin state
+  const [garminConnected, setGarminConnected] = useState(false);
+  const [garminEmail, setGarminEmail] = useState<string | null>(null);
+  const [garminFormEmail, setGarminFormEmail] = useState("");
+  const [garminFormPassword, setGarminFormPassword] = useState("");
+  const [garminConnecting, setGarminConnecting] = useState(false);
+  const [garminMsg, setGarminMsg] = useState("");
+  const [garminSyncing, setGarminSyncing] = useState(false);
+  const [garminSyncMsg, setGarminSyncMsg] = useState("");
+  const [garminSyncStart, setGarminSyncStart] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [garminSyncEnd] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -39,7 +60,48 @@ export default function SettingsPage() {
       });
       setEditedRules(init);
     });
+    api.garminStatus().then((s) => {
+      setGarminConnected(s.connected);
+      setGarminEmail(s.email);
+    }).catch(() => {});
   }, [user]);
+
+  const handleGarminConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGarminConnecting(true);
+    setGarminMsg("");
+    try {
+      const res = await api.garminConnect(garminFormEmail.trim(), garminFormPassword);
+      setGarminConnected(res.connected);
+      setGarminEmail(res.email);
+      setGarminFormPassword("");
+      setGarminMsg("Connected to Garmin Connect!");
+    } catch (err: unknown) {
+      setGarminMsg(err instanceof Error ? err.message : "Failed to connect");
+    } finally {
+      setGarminConnecting(false);
+    }
+  };
+
+  const handleGarminDisconnect = async () => {
+    await api.garminDisconnect();
+    setGarminConnected(false);
+    setGarminEmail(null);
+    setGarminMsg("Disconnected from Garmin.");
+  };
+
+  const handleGarminSync = async () => {
+    setGarminSyncing(true);
+    setGarminSyncMsg("");
+    try {
+      const res = await api.garminSync(garminSyncStart, garminSyncEnd);
+      setGarminSyncMsg(`Done — ${res.imported} imported, ${res.skipped} skipped.`);
+    } catch (err: unknown) {
+      setGarminSyncMsg(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setGarminSyncing(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +119,33 @@ export default function SettingsPage() {
       setProfileMsg("Failed to save");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleAddRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setAddingRule(true);
+    setAddMsg("");
+    try {
+      const rule = await api.createConversionRule({
+        activity_type: newName.trim(),
+        conversion_per_minute: Number(newPerMin) || 0,
+        conversion_per_km: Number(newPerKm) || 0,
+      });
+      setRules((prev) => [...prev, rule].sort((a, b) => a.activity_type.localeCompare(b.activity_type)));
+      setEditedRules((prev) => ({
+        ...prev,
+        [rule.activity_type]: { per_minute: rule.conversion_per_minute.toString(), per_km: rule.conversion_per_km.toString() },
+      }));
+      setNewName("");
+      setNewPerMin("");
+      setNewPerKm("");
+      setAddMsg(`"${rule.activity_type}" added.`);
+    } catch (err: unknown) {
+      setAddMsg(err instanceof Error ? err.message : "Failed to add");
+    } finally {
+      setAddingRule(false);
     }
   };
 
@@ -136,12 +225,150 @@ export default function SettingsPage() {
           </form>
         </section>
 
+        {/* Garmin Sync */}
+        <section className="bg-white rounded-2xl border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Garmin Sync</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Import activities directly from Garmin Connect. Duplicates are skipped automatically.
+            If your account has 2-factor authentication enabled, disable it on Garmin Connect first.
+          </p>
+
+          {garminConnected ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                <span className="text-gray-700">Connected as <strong>{garminEmail}</strong></span>
+                <button
+                  onClick={handleGarminDisconnect}
+                  className="ml-auto text-xs text-red-500 hover:text-red-700 hover:underline"
+                >
+                  Disconnect
+                </button>
+              </div>
+
+              <div className="flex gap-3 items-end flex-wrap">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={garminSyncStart}
+                    onChange={(e) => setGarminSyncStart(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={garminSyncEnd}
+                    disabled
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-gray-50 text-gray-500"
+                  />
+                </div>
+                <button
+                  onClick={handleGarminSync}
+                  disabled={garminSyncing}
+                  className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {garminSyncing ? "Syncing…" : "Sync Activities"}
+                </button>
+              </div>
+              {garminSyncMsg && (
+                <p className={`text-sm ${garminSyncMsg.includes("failed") || garminSyncMsg.includes("Failed") ? "text-red-600" : "text-green-600"}`}>
+                  {garminSyncMsg}
+                </p>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={handleGarminConnect} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Garmin Connect Email</label>
+                  <input
+                    type="email"
+                    value={garminFormEmail}
+                    onChange={(e) => setGarminFormEmail(e.target.value)}
+                    required
+                    placeholder="you@example.com"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={garminFormPassword}
+                    onChange={(e) => setGarminFormPassword(e.target.value)}
+                    required
+                    placeholder="••••••••"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={garminConnecting}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {garminConnecting ? "Connecting…" : "Connect Garmin"}
+                </button>
+                {garminMsg && (
+                  <span className={`text-sm ${garminMsg.includes("Connected") ? "text-green-600" : "text-red-600"}`}>
+                    {garminMsg}
+                  </span>
+                )}
+              </div>
+            </form>
+          )}
+        </section>
+
         {/* Conversion Rules */}
         <section className="bg-white rounded-2xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Conversion Rules</h2>
           <p className="text-sm text-gray-500 mb-4">
             Changing a rule retroactively recalculates all matching activities.
           </p>
+
+          {/* Add custom activity */}
+          <form onSubmit={handleAddRule} className="flex gap-2 items-end mb-5 pb-5 border-b border-gray-100">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">New activity name</label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Paddleboarding"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="w-20">
+              <label className="block text-xs text-gray-500 mb-1">per min</label>
+              <input
+                type="number" min="0" step="0.1" value={newPerMin}
+                onChange={(e) => setNewPerMin(e.target.value)}
+                placeholder="0"
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="w-20">
+              <label className="block text-xs text-gray-500 mb-1">per km</label>
+              <input
+                type="number" min="0" step="1" value={newPerKm}
+                onChange={(e) => setNewPerKm(e.target.value)}
+                placeholder="0"
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={addingRule || !newName.trim()}
+              className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {addingRule ? "Adding…" : "Add"}
+            </button>
+          </form>
+          {addMsg && <p className="text-sm text-green-600 mb-3">{addMsg}</p>}
           {ruleMsg && (
             <p className="text-sm text-green-600 mb-3">{ruleMsg}</p>
           )}

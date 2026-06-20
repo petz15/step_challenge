@@ -7,7 +7,7 @@ import os
 import sys
 import traceback
 
-from routers import auth, activities, leaderboards, settings
+from routers import auth, activities, leaderboards, settings, garmin
 
 
 def run_migrations():
@@ -57,6 +57,7 @@ app.include_router(auth.router)
 app.include_router(activities.router)
 app.include_router(leaderboards.router)
 app.include_router(settings.router)
+app.include_router(garmin.router)
 
 
 @app.get("/health")

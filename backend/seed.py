@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Seed the database with default data. Run with --reset to drop and recreate all tables."""
 import sys
-import random
-from datetime import date, timedelta
 from database import SessionLocal
 import models
 from auth import hash_password
@@ -12,17 +10,6 @@ DEFAULT_USERS = [
      "weekly_goal": 70000, "monthly_goal": 280000},
     {"email": "anine@stepchallenge.local", "name": "Anine", "password": "anine123",
      "weekly_goal": 70000, "monthly_goal": 280000},
-]
-
-SAMPLE_ACTIVITIES = [
-    ("Walking, Moderate",              45,  None, None),
-    ("Running, Moderate (10 min/mile)", 30,  None, None),
-    ("Hiking",                          90,  None, None),
-    ("Cycling, Easy (10 mph)",          60,  None, None),
-    ("Weight Lifting",                  45,  None, None),
-    ("Walking, Moderate",             None,   5.0, None),
-    ("Running, Easy (12 min/mile)",   None,   8.0, None),
-    ("Manual Steps",                  None,  None, 8000),
 ]
 
 
@@ -43,7 +30,6 @@ def seed(reset: bool = False):
 
     db = SessionLocal()
     try:
-        # Users
         existing_users = db.query(models.User).count()
         if existing_users == 0:
             print("Seeding users...")
@@ -57,42 +43,6 @@ def seed(reset: bool = False):
                 )
                 db.add(user)
             db.commit()
-
-        # Sample activities (last 30 days)
-        existing_activities = db.query(models.Activity).count()
-        if existing_activities == 0:
-            print("Seeding sample activities...")
-            users = db.query(models.User).all()
-            rules = {r.activity_type: r for r in db.query(models.ConversionRule).all()}
-            today = date.today()
-
-            for user in users:
-                for i in range(30):
-                    day = today - timedelta(days=i)
-                    for _ in range(random.randint(1, 2)):
-                        act_type, dur, dist, manual = random.choice(SAMPLE_ACTIVITIES)
-                        rule = rules.get(act_type)
-                        if manual:
-                            steps = manual + random.randint(-500, 500)
-                        elif dur and rule:
-                            steps = int(round(dur * rule.conversion_per_minute * random.uniform(0.8, 1.2)))
-                        elif dist and rule:
-                            steps = int(round(dist * rule.conversion_per_km * random.uniform(0.8, 1.2)))
-                        else:
-                            steps = 0
-
-                        db.add(models.Activity(
-                            user_id=user.id,
-                            activity_type=act_type,
-                            duration_minutes=dur,
-                            distance_km=dist,
-                            manual_steps=manual,
-                            step_equivalent_calculated=max(0, steps),
-                            date=day,
-                            source="manual",
-                        ))
-            db.commit()
-            print(f"Seeded sample activities for {len(users)} users over 30 days")
 
         print("\nDatabase seeded successfully!")
         print("\nLogin credentials:")

@@ -16,6 +16,28 @@ def get_conversion_rules(
     return db.query(models.ConversionRule).order_by(models.ConversionRule.activity_type).all()
 
 
+@router.post("/conversion-rules", response_model=schemas.ConversionRuleResponse, status_code=201)
+def create_conversion_rule(
+    body: schemas.ConversionRuleCreate,
+    _: models.User = Depends(auth_utils.get_current_user),
+    db: Session = Depends(get_db),
+):
+    if db.query(models.ConversionRule).filter(
+        models.ConversionRule.activity_type == body.activity_type
+    ).first():
+        raise HTTPException(status_code=409, detail="Activity type already exists")
+    rule = models.ConversionRule(
+        activity_type=body.activity_type,
+        conversion_per_minute=body.conversion_per_minute,
+        conversion_per_km=body.conversion_per_km,
+        is_default=False,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
 @router.put("/conversion-rules/{activity_type}")
 def update_conversion_rule(
     activity_type: str,

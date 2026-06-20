@@ -66,8 +66,26 @@ export const api = {
     return request<LeaderboardEntry[]>(`/api/leaderboards/monthly${q.toString() ? "?" + q : ""}`);
   },
 
+  // Garmin
+  garminStatus: () =>
+    request<{ connected: boolean; email: string | null }>("/api/garmin/status"),
+  garminConnect: (email: string, password: string) =>
+    request<{ connected: boolean; email: string | null }>("/api/garmin/connect", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  garminSync: (start_date: string, end_date: string) =>
+    request<{ imported: number; skipped: number }>("/api/garmin/sync", {
+      method: "POST",
+      body: JSON.stringify({ start_date, end_date }),
+    }),
+  garminDisconnect: () =>
+    request<{ success: boolean }>("/api/garmin/disconnect", { method: "DELETE" }),
+
   // Settings
   getConversionRules: () => request<ConversionRule[]>("/api/settings/conversion-rules"),
+  createConversionRule: (data: { activity_type: string; conversion_per_minute: number; conversion_per_km: number }) =>
+    request<ConversionRule>("/api/settings/conversion-rules", { method: "POST", body: JSON.stringify(data) }),
   updateConversionRule: (activityType: string, data: { conversion_per_minute?: number; conversion_per_km?: number }) =>
     request<{ success: boolean; message: string }>(`/api/settings/conversion-rules/${encodeURIComponent(activityType)}`, {
       method: "PUT",
@@ -90,6 +108,7 @@ export interface ActivityResponse {
   date: string;
   notes: string | null;
   source: string;
+  garmin_activity_id: string | null;
   created_at: string;
 }
 

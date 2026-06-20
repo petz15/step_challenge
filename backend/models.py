@@ -33,6 +33,9 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    garmin_email = Column(String, nullable=True)
+    garmin_password_enc = Column(Text, nullable=True)
+
     activities = relationship("Activity", back_populates="user")
 
 
@@ -49,6 +52,7 @@ class Activity(Base):
     date = Column(Date, nullable=False)
     notes = Column(Text, nullable=True)
     source = Column(String, nullable=False, default="manual")
+    garmin_activity_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

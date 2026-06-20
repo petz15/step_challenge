@@ -54,9 +54,9 @@ _RULES = [
     ("Tae Bo",                          190.0,  0.0),
     ("Wrestling",                       170.0,  0.0),
     # Cycling
-    ("Cycling, Easy (10 mph)",          132.0,  500.0),
-    ("Cycling, Moderate (12 mph)",      174.0,  550.0),
-    ("Cycling, Vigorous (15 mph)",      211.0,  530.0),
+    ("Cycling, Easy (16 km/h)",          132.0,  500.0),
+    ("Cycling, Moderate (19 km/h)",     174.0,  550.0),
+    ("Cycling, Vigorous (24 km/h)",     211.0,  530.0),
     # Fitness Classes & Gym
     ("Calisthenics",                    106.0,  0.0),
     ("Cheerleading",                    100.0,  0.0),
@@ -107,9 +107,9 @@ _RULES = [
     ("Water Skiing",                    145.0,  0.0),
     # Running & Jogging
     ("Jogging",                         168.0,  1400.0),
-    ("Running, Easy (12 min/mile)",     178.0,  1300.0),
-    ("Running, Moderate (10 min/mile)", 222.0,  1300.0),
-    ("Running, Fast (8 min/mile)",      278.0,  1300.0),
+    ("Running, Easy (8 km/h)",           178.0,  1300.0),
+    ("Running, Moderate (10 km/h)",     222.0,  1300.0),
+    ("Running, Fast (12 km/h)",         278.0,  1300.0),
     # Skating
     ("Ice Skating, Recreational",       144.0,  0.0),
     ("Ice Skating, Moderate",           122.0,  0.0),
@@ -122,9 +122,9 @@ _RULES = [
     ("Snowboarding",                    182.0,  0.0),
     ("Snowshoeing",                     180.0,  0.0),
     # Walking
-    ("Walking, Slow (2 mph)",            76.0,  1425.0),
+    ("Walking, Slow (3 km/h)",            76.0,  1425.0),
     ("Walking, Moderate",                95.0,  1200.0),
-    ("Walking, Fast (4 mph)",           152.0,  1425.0),
+    ("Walking, Fast (6 km/h)",          152.0,  1425.0),
     # Wheelchair
     ("Wheeling, Leisurely",              70.0,  0.0),
     ("Wheeling, Fast",                  137.0,  0.0),

@@ -7,3 +7,5 @@ argon2-cffi==23.1.0
 python-dotenv==1.0.1
 python-multipart==0.0.12
 alembic==1.13.3
+garminconnect>=0.2.19
+cryptography>=42.0.0
