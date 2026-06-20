@@ -4,10 +4,19 @@ from alembic import context
 from dotenv import load_dotenv
 import os
 
+from urllib.parse import quote
+
 load_dotenv()
 
 config = context.config
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", ""))
+
+_password = quote(os.environ["POSTGRES_PASSWORD"], safe="")
+_url = (
+    f"postgresql+psycopg://{os.environ['POSTGRES_USER']}:{_password}"
+    f"@{os.environ['POSTGRES_HOST']}:{os.getenv('POSTGRES_PORT', '5432')}"
+    f"/{os.environ['POSTGRES_DB']}"
+)
+config.set_main_option("sqlalchemy.url", _url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
