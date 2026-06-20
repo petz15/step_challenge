@@ -48,7 +48,7 @@ export default function SettingsPage() {
     if (user.is_superuser) {
       api.getConversionRules().then((r) => {
         setRules(r);
-        const init: Record<string, { per_minute: string; per_km: string }> = {};
+        const init: Record<string, { per_minute: string; per_km: string; multiplier: string }> = {};
         r.forEach((rule) => {
           init[rule.activity_type] = {
             per_minute: rule.conversion_per_minute.toString(),
