@@ -99,6 +99,24 @@ This drops and recreates all tables (via Alembic), then re-seeds the two default
 
 ---
 
+## Access from phone / other devices on the LAN
+
+1. Find the dev machine's LAN IP:
+   ```bash
+   ip a   # look for 192.168.x.x under your network interface
+   ```
+2. Set it in `.env`:
+   ```dotenv
+   DEV_MACHINE_IP=192.168.1.x
+   ```
+3. Rebuild the frontend (the IP is baked in at build time):
+   ```bash
+   docker compose up --build frontend
+   ```
+4. Open `http://192.168.1.x:3000` on your phone. Make sure the firewall allows ports 3000 and 8000 from the LAN.
+
+---
+
 ## View logs
 
 ```bash
