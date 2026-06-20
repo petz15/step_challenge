@@ -119,3 +119,4 @@ class GarminStatusResponse(BaseModel):
 class GarminSyncResponse(BaseModel):
     imported: int
     skipped: int
+    steps_updated: int

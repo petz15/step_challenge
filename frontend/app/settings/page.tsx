@@ -95,7 +95,9 @@ export default function SettingsPage() {
     setGarminSyncMsg("");
     try {
       const res = await api.garminSync(garminSyncStart, garminSyncEnd);
-      setGarminSyncMsg(`Done — ${res.imported} imported, ${res.skipped} skipped.`);
+      setGarminSyncMsg(
+        `Done — ${res.imported} activities imported, ${res.steps_updated} daily step totals updated, ${res.skipped} skipped.`
+      );
     } catch (err: unknown) {
       setGarminSyncMsg(err instanceof Error ? err.message : "Sync failed");
     } finally {

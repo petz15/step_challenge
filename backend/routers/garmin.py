@@ -5,6 +5,7 @@ from datetime import date
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
@@ -178,7 +179,7 @@ def garmin_sync(
     current_user: models.User = Depends(auth_utils.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Import activities from Garmin Connect for the given date range."""
+    """Import Garmin activities and net passive daily steps for the given date range."""
     if not current_user.garmin_password_enc:
         raise HTTPException(status_code=400, detail="Garmin not connected. Go to Settings → Garmin Sync to connect.")
 
@@ -188,11 +189,11 @@ def garmin_sync(
     password = _decrypt(current_user.garmin_password_enc)
     client = _garmin_client(current_user.garmin_email, password)
 
+    start_str = body.start_date.strftime("%Y-%m-%d")
+    end_str = body.end_date.strftime("%Y-%m-%d")
+
     try:
-        raw_activities = client.get_activities_by_date(
-            startdate=body.start_date.strftime("%Y-%m-%d"),
-            enddate=body.end_date.strftime("%Y-%m-%d"),
-        )
+        raw_activities = client.get_activities_by_date(startdate=start_str, enddate=end_str)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to fetch activities from Garmin: {exc}")
 
@@ -205,7 +206,7 @@ def garmin_sync(
             skipped += 1
             continue
 
-        # Skip already-imported activities
+        # Skip already-imported activities (activities are immutable once logged)
         exists = db.query(models.Activity).filter(
             models.Activity.garmin_activity_id == garmin_id,
             models.Activity.user_id == current_user.id,
@@ -214,29 +215,27 @@ def garmin_sync(
             skipped += 1
             continue
 
-        # Map Garmin activity type to ours
         type_key = (act.get("activityType") or {}).get("typeKey", "").lower()
         our_type = GARMIN_TYPE_MAP.get(type_key)
         if our_type is None:
             skipped += 1
             continue
 
-        # Parse date from startTimeLocal ("2026-06-20 07:30:00" or "2026-06-20T07:30:00")
-        start_str = act.get("startTimeLocal", "")
+        start_time_str = act.get("startTimeLocal", "")
         try:
-            activity_date = date.fromisoformat(start_str[:10])
+            activity_date = date.fromisoformat(start_time_str[:10])
         except (ValueError, TypeError):
             skipped += 1
             continue
 
-        # Parse duration / distance / steps
         duration_s = act.get("duration") or 0
         duration_min = round(duration_s / 60, 1) if duration_s > 0 else None
         distance_m = act.get("distance") or 0
         distance_km = round(distance_m / 1000, 3) if distance_m > 0 else None
         garmin_steps = act.get("steps") or 0
 
-        # Use real step count for step-based activities; duration/distance otherwise
+        # Step-based activities (running, walking, hiking): use Garmin's real step count.
+        # Everything else (cycling, strength, etc.): convert via duration/distance rules.
         if garmin_steps > 0 and type_key in STEP_ACTIVITY_KEYS:
             manual_steps = int(garmin_steps)
             duration_min = None
@@ -245,7 +244,6 @@ def garmin_sync(
             manual_steps = None
 
         steps = calculate_step_equivalent(our_type, duration_min, distance_km, manual_steps, db)
-
         activity_name = act.get("activityName") or ""
 
         db.add(models.Activity(
@@ -262,8 +260,68 @@ def garmin_sync(
         ))
         imported += 1
 
+    # Flush so the new activities are visible to the step-deduction query below.
+    db.flush()
+
+    # --- Daily passive steps ---
+    # Garmin's daily total includes steps from tracked workouts (running, walking, hiking).
+    # We subtract those to get only the passive steps (errands, walking around, etc.)
+    # and upsert one "Manual Steps" entry per day so re-syncing mid-day updates the count.
+    steps_updated = 0
+    try:
+        daily_steps_data = client.get_daily_steps(startdate=start_str, enddate=end_str)
+    except Exception:
+        daily_steps_data = []
+
+    for day_data in (daily_steps_data or []):
+        day_str = day_data.get("calendarDate", "")
+        total_steps = day_data.get("totalSteps") or 0
+        if not day_str or total_steps <= 0:
+            continue
+
+        try:
+            day_date = date.fromisoformat(day_str)
+        except ValueError:
+            continue
+
+        # Sum of real Garmin step counts already stored for this user on this day
+        # (i.e., activities where we used manual_steps from Garmin, not converted ones).
+        activity_steps: int = db.query(func.coalesce(func.sum(models.Activity.manual_steps), 0)).filter(
+            models.Activity.user_id == current_user.id,
+            models.Activity.date == day_date,
+            models.Activity.source == "garmin_api",
+            models.Activity.garmin_activity_id.notlike("daily_steps_%"),
+            models.Activity.manual_steps.isnot(None),
+        ).scalar() or 0
+
+        net_passive = int(total_steps) - int(activity_steps)
+        if net_passive <= 0:
+            continue
+
+        synthetic_id = f"daily_steps_{day_str}"
+        existing = db.query(models.Activity).filter(
+            models.Activity.garmin_activity_id == synthetic_id,
+            models.Activity.user_id == current_user.id,
+        ).first()
+
+        if existing:
+            existing.manual_steps = net_passive
+            existing.step_equivalent_calculated = net_passive
+        else:
+            db.add(models.Activity(
+                user_id=current_user.id,
+                activity_type="Manual Steps",
+                manual_steps=net_passive,
+                step_equivalent_calculated=net_passive,
+                date=day_date,
+                notes="Passive daily steps",
+                source="garmin_api",
+                garmin_activity_id=synthetic_id,
+            ))
+        steps_updated += 1
+
     db.commit()
-    return schemas.GarminSyncResponse(imported=imported, skipped=skipped)
+    return schemas.GarminSyncResponse(imported=imported, skipped=skipped, steps_updated=steps_updated)
 
 
 @router.delete("/disconnect")

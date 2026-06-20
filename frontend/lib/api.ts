@@ -75,7 +75,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   garminSync: (start_date: string, end_date: string) =>
-    request<{ imported: number; skipped: number }>("/api/garmin/sync", {
+    request<{ imported: number; skipped: number; steps_updated: number }>("/api/garmin/sync", {
       method: "POST",
       body: JSON.stringify({ start_date, end_date }),
     }),
