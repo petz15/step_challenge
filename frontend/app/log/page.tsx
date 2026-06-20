@@ -48,7 +48,7 @@ export default function LogActivityPage() {
 
   const preview = estimateSteps(activityType, duration, distance, manualSteps, rules);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
@@ -83,7 +83,7 @@ export default function LogActivityPage() {
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="max-w-lg mx-auto px-4 py-6">
+      <main className="max-w-lg mx-auto px-4 py-6 pb-24">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Log Activity</h1>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">

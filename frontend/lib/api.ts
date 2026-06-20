@@ -82,6 +82,13 @@ export const api = {
   garminDisconnect: () =>
     request<{ success: boolean }>("/api/garmin/disconnect", { method: "DELETE" }),
 
+  // Stats
+  statsOverview: () =>
+    request<{
+      streaks: { user_id: number; name: string; streak: number }[];
+      weekly_trend: { week_start: string; totals: Record<string, number> }[];
+    }>("/api/stats/overview"),
+
   // Settings
   getConversionRules: () => request<ConversionRule[]>("/api/settings/conversion-rules"),
   createConversionRule: (data: { activity_type: string; conversion_per_minute: number; conversion_per_km: number }) =>

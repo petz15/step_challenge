@@ -12,8 +12,6 @@ export default function SettingsPage() {
   const [rules, setRules] = useState<ConversionRule[]>([]);
   const [editedRules, setEditedRules] = useState<Record<string, { per_minute: string; per_km: string }>>({});
   const [name, setName] = useState("");
-  const [weeklyGoal, setWeeklyGoal] = useState("");
-  const [monthlyGoal, setMonthlyGoal] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRule, setSavingRule] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState("");
@@ -47,8 +45,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!user) return;
     setName(user.name);
-    setWeeklyGoal(user.weekly_goal?.toString() ?? "");
-    setMonthlyGoal(user.monthly_goal?.toString() ?? "");
     api.getConversionRules().then((r) => {
       setRules(r);
       const init: Record<string, { per_minute: string; per_km: string }> = {};
@@ -110,11 +106,7 @@ export default function SettingsPage() {
     setSavingProfile(true);
     setProfileMsg("");
     try {
-      await api.updateUserSettings({
-        name: name || undefined,
-        weekly_goal: weeklyGoal ? Number(weeklyGoal) : null,
-        monthly_goal: monthlyGoal ? Number(monthlyGoal) : null,
-      });
+      await api.updateUserSettings({ name: name || undefined });
       await refreshUser();
       setProfileMsg("Saved!");
     } catch {
@@ -174,12 +166,12 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-8">
+      <main className="max-w-2xl mx-auto px-4 py-6 pb-24 space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
 
         {/* Profile */}
-        <section className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile & Goals</h2>
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -187,32 +179,8 @@ export default function SettingsPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Goal (steps)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={weeklyGoal}
-                  onChange={(e) => setWeeklyGoal(e.target.value)}
-                  placeholder="e.g. 70000"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Goal (steps)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={monthlyGoal}
-                  onChange={(e) => setMonthlyGoal(e.target.value)}
-                  placeholder="e.g. 280000"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -220,7 +188,7 @@ export default function SettingsPage() {
                 disabled={savingProfile}
                 className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >
-                {savingProfile ? "Saving…" : "Save Profile"}
+                {savingProfile ? "Saving…" : "Save"}
               </button>
               {profileMsg && <span className="text-sm text-green-600">{profileMsg}</span>}
             </div>
@@ -228,7 +196,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Garmin Sync */}
-        <section className="bg-white rounded-2xl border border-gray-200 p-6">
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Garmin Sync</h2>
           <p className="text-sm text-gray-500 mb-4">
             Import activities directly from Garmin Connect. Duplicates are skipped automatically.
@@ -326,7 +294,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Conversion Rules */}
-        <section className="bg-white rounded-2xl border border-gray-200 p-6">
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Conversion Rules</h2>
           <p className="text-sm text-gray-500 mb-4">
             Changing a rule retroactively recalculates all matching activities.
