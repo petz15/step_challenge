@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -17,16 +18,19 @@ SECRET_KEY = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "7"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_ph = PasswordHasher()
 bearer_scheme = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return _ph.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return _ph.verify(hashed, plain)
+    except VerifyMismatchError:
+        return False
 
 
 def create_access_token(user_id: int) -> str:
