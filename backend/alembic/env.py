@@ -1,48 +1,30 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
 from alembic import context
-from dotenv import load_dotenv
-import os
-
-from urllib.parse import quote
-
-load_dotenv()
 
 config = context.config
-
-_password = quote(os.environ["POSTGRES_PASSWORD"], safe="")
-_url = (
-    f"postgresql+psycopg://{os.environ['POSTGRES_USER']}:{_password}"
-    f"@{os.environ['POSTGRES_HOST']}:{os.getenv('POSTGRES_PORT', '5432')}"
-    f"/{os.environ['POSTGRES_DB']}"
-)
-config.set_main_option("sqlalchemy.url", _url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import models so autogenerate can see them
-from database import Base  # noqa: F401
-import models  # noqa: F401
+from database import Base, engine  # noqa: E402
+import models  # noqa: F401, E402
 
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True,
-                      dialect_opts={"paramstyle": "named"})
+    context.configure(
+        url=str(engine.url),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-    with connectable.connect() as connection:
+    with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
