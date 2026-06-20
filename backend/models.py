@@ -36,6 +36,7 @@ class User(Base):
     is_superuser = Column(Boolean, default=False, nullable=False)
     garmin_email = Column(String, nullable=True)
     garmin_password_enc = Column(Text, nullable=True)
+    garmin_tokens_enc = Column(Text, nullable=True)
 
     activities = relationship("Activity", back_populates="user")
 

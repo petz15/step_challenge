@@ -1,6 +1,8 @@
 import base64
 import hashlib
+import json
 import os
+import tempfile
 from datetime import date, timedelta
 
 from cryptography.fernet import Fernet
@@ -152,30 +154,62 @@ def _decrypt(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
 
 
-def _garmin_client(email: str, password: str, mfa_code: str | None = None):
-    """Authenticate with Garmin Connect and return a logged-in client.
+class _MfaRequiredError(Exception):
+    """Raised from the prompt_mfa callback when no code was supplied yet."""
 
-    Pass mfa_code when the account has 2FA enabled — the library calls
-    prompt_mfa() to retrieve it instead of blocking on stdin.
+
+def _dump_tokens(client) -> str:
+    """Serialize garth session tokens to an encrypted-ready JSON string."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        client.garth.dump(tmpdir)
+        files = {}
+        for fname in os.listdir(tmpdir):
+            with open(os.path.join(tmpdir, fname)) as f:
+                files[fname] = f.read()
+        return json.dumps(files)
+
+
+def _garmin_client_from_tokens(encrypted_tokens: str) -> object:
+    """Restore a Garmin client from stored session tokens (no MFA needed)."""
+    try:
+        import garminconnect
+    except ImportError:
+        raise HTTPException(status_code=500, detail="garminconnect library not installed")
+
+    files = json.loads(_decrypt(encrypted_tokens))
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for fname, content in files.items():
+            with open(os.path.join(tmpdir, fname), "w") as f:
+                f.write(content)
+        client = garminconnect.Garmin()
+        client.login(tmpdir)
+    return client
+
+
+def _garmin_fresh_login(email: str, password: str, mfa_code: str | None = None) -> object:
+    """Full credential login with optional MFA.
+
+    If Garmin requests MFA and no code was provided, raises HTTP 400 "mfa_required"
+    so the frontend can show the code input and resubmit.
     """
     try:
         import garminconnect
     except ImportError:
         raise HTTPException(status_code=500, detail="garminconnect library not installed")
 
-    prompt_mfa = (lambda: mfa_code) if mfa_code else None
+    def _prompt_mfa() -> str:
+        if mfa_code:
+            return mfa_code
+        raise _MfaRequiredError()
 
     try:
-        client = garminconnect.Garmin(email, password, prompt_mfa=prompt_mfa)
+        client = garminconnect.Garmin(email, password, prompt_mfa=_prompt_mfa)
         client.login()
         return client
+    except _MfaRequiredError:
+        raise HTTPException(status_code=400, detail="mfa_required")
     except garminconnect.GarminConnectAuthenticationError as exc:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Garmin authentication failed: {exc}. "
-                   "Check your credentials. If your account has 2FA, enter the current "
-                   "authenticator code in the MFA field.",
-        )
+        raise HTTPException(status_code=401, detail=f"Garmin authentication failed: {exc}")
     except garminconnect.GarminConnectTooManyRequestsError:
         raise HTTPException(status_code=429, detail="Garmin Connect rate limit reached. Try again later.")
     except Exception as exc:
@@ -188,10 +222,11 @@ def garmin_connect(
     current_user: models.User = Depends(auth_utils.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Save Garmin credentials after verifying they work."""
-    _garmin_client(body.email, body.password, body.mfa_code)  # raises on bad creds
+    """Full credential login — saves OAuth tokens so future syncs skip re-authentication."""
+    client = _garmin_fresh_login(body.email, body.password, body.mfa_code)
     current_user.garmin_email = body.email
     current_user.garmin_password_enc = _encrypt(body.password)
+    current_user.garmin_tokens_enc = _encrypt(_dump_tokens(client))
     db.commit()
     return schemas.GarminStatusResponse(connected=True, email=body.email)
 
@@ -211,14 +246,34 @@ def garmin_sync(
     db: Session = Depends(get_db),
 ):
     """Import Garmin activities and net passive daily steps for the given date range."""
-    if not current_user.garmin_password_enc:
+    if not current_user.garmin_email:
         raise HTTPException(status_code=400, detail="Garmin not connected. Go to Settings → Garmin Sync to connect.")
 
     if body.start_date > body.end_date:
         raise HTTPException(status_code=422, detail="start_date must be before end_date")
 
-    password = _decrypt(current_user.garmin_password_enc)
-    client = _garmin_client(current_user.garmin_email, password)
+    # Prefer stored session tokens — no MFA needed, no password re-send.
+    # Fall back to password re-login (for accounts without MFA or for first sync after migration).
+    client = None
+    if current_user.garmin_tokens_enc:
+        try:
+            client = _garmin_client_from_tokens(current_user.garmin_tokens_enc)
+        except Exception:
+            client = None  # tokens expired — try password below
+
+    if client is None:
+        if not current_user.garmin_password_enc:
+            raise HTTPException(
+                status_code=400,
+                detail="Garmin session expired. Go to Settings → Garmin Sync to reconnect.",
+            )
+        password = _decrypt(current_user.garmin_password_enc)
+        client = _garmin_fresh_login(current_user.garmin_email, password)
+        try:
+            current_user.garmin_tokens_enc = _encrypt(_dump_tokens(client))
+            db.commit()
+        except Exception:
+            pass
 
     start_str = body.start_date.strftime("%Y-%m-%d")
     end_str = body.end_date.strftime("%Y-%m-%d")
@@ -425,5 +480,6 @@ def garmin_disconnect(
 ):
     current_user.garmin_email = None
     current_user.garmin_password_enc = None
+    current_user.garmin_tokens_enc = None
     db.commit()
     return {"success": True}

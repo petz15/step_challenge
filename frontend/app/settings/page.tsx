@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [garminFormEmail, setGarminFormEmail] = useState("");
   const [garminFormPassword, setGarminFormPassword] = useState("");
   const [garminFormMfa, setGarminFormMfa] = useState("");
+  const [garminMfaRequired, setGarminMfaRequired] = useState(false);
   const [garminConnecting, setGarminConnecting] = useState(false);
   const [garminMsg, setGarminMsg] = useState("");
   const [garminSyncing, setGarminSyncing] = useState(false);
@@ -77,9 +78,16 @@ export default function SettingsPage() {
       setGarminEmail(res.email);
       setGarminFormPassword("");
       setGarminFormMfa("");
+      setGarminMfaRequired(false);
       setGarminMsg("Connected to Garmin Connect!");
     } catch (err: unknown) {
-      setGarminMsg(err instanceof Error ? err.message : "Failed to connect");
+      const msg = err instanceof Error ? err.message : "Failed to connect";
+      if (msg === "mfa_required") {
+        setGarminMfaRequired(true);
+        setGarminMsg("");
+      } else {
+        setGarminMsg(msg);
+      }
     } finally {
       setGarminConnecting(false);
     }
@@ -102,7 +110,12 @@ export default function SettingsPage() {
         `Done — ${res.imported} imported, ${res.steps_updated} day totals updated, ${res.skipped} skipped.${warn}`
       );
     } catch (err: unknown) {
-      setGarminSyncMsg(err instanceof Error ? err.message : "Sync failed");
+      const msg = err instanceof Error ? err.message : "Sync failed";
+      setGarminSyncMsg(
+        msg === "mfa_required"
+          ? "Garmin requires 2FA. Disconnect and reconnect below with your authenticator code."
+          : msg
+      );
     } finally {
       setGarminSyncing(false);
     }
@@ -333,21 +346,24 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  2FA Code <span className="text-gray-400 font-normal">(only if your account has 2-factor auth)</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={garminFormMfa}
-                  onChange={(e) => setGarminFormMfa(e.target.value.replace(/\D/g, ""))}
-                  placeholder="123456"
-                  className="w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+              {garminMfaRequired && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                  <p className="text-sm font-medium text-amber-800 mb-2">
+                    Garmin sent a verification code to your email address. Enter it below to complete the connection.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    autoFocus
+                    value={garminFormMfa}
+                    onChange={(e) => setGarminFormMfa(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6-digit code"
+                    className="w-36 border border-amber-300 rounded-lg px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <button
                   type="submit"
