@@ -45,17 +45,19 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!user) return;
     setName(user.name);
-    api.getConversionRules().then((r) => {
-      setRules(r);
-      const init: Record<string, { per_minute: string; per_km: string }> = {};
-      r.forEach((rule) => {
-        init[rule.activity_type] = {
-          per_minute: rule.conversion_per_minute.toString(),
-          per_km: rule.conversion_per_km.toString(),
-        };
+    if (user.is_superuser) {
+      api.getConversionRules().then((r) => {
+        setRules(r);
+        const init: Record<string, { per_minute: string; per_km: string }> = {};
+        r.forEach((rule) => {
+          init[rule.activity_type] = {
+            per_minute: rule.conversion_per_minute.toString(),
+            per_km: rule.conversion_per_km.toString(),
+          };
+        });
+        setEditedRules(init);
       });
-      setEditedRules(init);
-    });
+    }
     api.garminStatus().then((s) => {
       setGarminConnected(s.connected);
       setGarminEmail(s.email);
@@ -91,8 +93,9 @@ export default function SettingsPage() {
     setGarminSyncMsg("");
     try {
       const res = await api.garminSync(garminSyncStart, garminSyncEnd);
+      const warn = res.warnings?.length ? ` Warning: ${res.warnings.join('; ')}` : '';
       setGarminSyncMsg(
-        `Done — ${res.imported} activities imported, ${res.steps_updated} daily step totals updated, ${res.skipped} skipped.`
+        `Done — ${res.imported} imported, ${res.steps_updated} day totals updated, ${res.skipped} skipped.${warn}`
       );
     } catch (err: unknown) {
       setGarminSyncMsg(err instanceof Error ? err.message : "Sync failed");
@@ -293,8 +296,8 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* Conversion Rules */}
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        {/* Conversion Rules — superuser only */}
+        {user.is_superuser && <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Conversion Rules</h2>
           <p className="text-sm text-gray-500 mb-4">
             Changing a rule retroactively recalculates all matching activities.
@@ -392,7 +395,7 @@ export default function SettingsPage() {
               );
             })}
           </div>
-        </section>
+        </section>}
       </main>
     </div>
   );

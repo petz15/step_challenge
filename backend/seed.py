@@ -7,9 +7,9 @@ from auth import hash_password
 
 DEFAULT_USERS = [
     {"email": "peter@stepchallenge.local", "name": "Peter", "password": "peter123",
-     "weekly_goal": 70000, "monthly_goal": 280000},
+     "is_superuser": True, "weekly_goal": 70000, "monthly_goal": 280000},
     {"email": "anine@stepchallenge.local", "name": "Anine", "password": "anine123",
-     "weekly_goal": 70000, "monthly_goal": 280000},
+     "is_superuser": False, "weekly_goal": 70000, "monthly_goal": 280000},
 ]
 
 
@@ -38,6 +38,7 @@ def seed(reset: bool = False):
                     email=u["email"],
                     name=u["name"],
                     password_hash=hash_password(u["password"]),
+                    is_superuser=u["is_superuser"],
                     weekly_goal=u["weekly_goal"],
                     monthly_goal=u["monthly_goal"],
                 )

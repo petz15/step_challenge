@@ -20,6 +20,7 @@ class UserMe(BaseModel):
     user_id: int
     email: str
     name: str
+    is_superuser: bool = False
     weekly_goal: Optional[int] = None
     monthly_goal: Optional[int] = None
 
@@ -120,3 +121,4 @@ class GarminSyncResponse(BaseModel):
     imported: int
     skipped: int
     steps_updated: int
+    warnings: list[str] = []

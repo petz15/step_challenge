@@ -36,7 +36,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
-  me: () => request<{ user_id: number; email: string; name: string; weekly_goal: number | null; monthly_goal: number | null }>("/api/auth/me"),
+  me: () => request<{ user_id: number; email: string; name: string; is_superuser: boolean; weekly_goal: number | null; monthly_goal: number | null }>("/api/auth/me"),
 
   // Activities
   createActivity: (data: object) =>
@@ -75,7 +75,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   garminSync: (start_date: string, end_date: string) =>
-    request<{ imported: number; skipped: number; steps_updated: number }>("/api/garmin/sync", {
+    request<{ imported: number; skipped: number; steps_updated: number; warnings: string[] }>("/api/garmin/sync", {
       method: "POST",
       body: JSON.stringify({ start_date, end_date }),
     }),

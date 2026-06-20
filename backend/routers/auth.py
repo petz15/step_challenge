@@ -26,6 +26,7 @@ def me(current_user: models.User = Depends(auth_utils.get_current_user)):
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.name,
+        is_superuser=current_user.is_superuser,
         weekly_goal=current_user.weekly_goal,
         monthly_goal=current_user.monthly_goal,
     )

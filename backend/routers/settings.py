@@ -8,6 +8,12 @@ from routers.activities import calculate_step_equivalent
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
+def _require_superuser(current_user: models.User = Depends(auth_utils.get_current_user)) -> models.User:
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser access required")
+    return current_user
+
+
 @router.get("/conversion-rules", response_model=List[schemas.ConversionRuleResponse])
 def get_conversion_rules(
     _: models.User = Depends(auth_utils.get_current_user),
@@ -19,7 +25,7 @@ def get_conversion_rules(
 @router.post("/conversion-rules", response_model=schemas.ConversionRuleResponse, status_code=201)
 def create_conversion_rule(
     body: schemas.ConversionRuleCreate,
-    _: models.User = Depends(auth_utils.get_current_user),
+    _: models.User = Depends(_require_superuser),
     db: Session = Depends(get_db),
 ):
     if db.query(models.ConversionRule).filter(
@@ -42,7 +48,7 @@ def create_conversion_rule(
 def update_conversion_rule(
     activity_type: str,
     body: schemas.ConversionRuleUpdate,
-    _: models.User = Depends(auth_utils.get_current_user),
+    _: models.User = Depends(_require_superuser),
     db: Session = Depends(get_db),
 ):
     rule = db.query(models.ConversionRule).filter(
@@ -83,6 +89,7 @@ def get_user_settings(
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.name,
+        is_superuser=current_user.is_superuser,
         weekly_goal=current_user.weekly_goal,
         monthly_goal=current_user.monthly_goal,
     )

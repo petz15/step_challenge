@@ -7,6 +7,7 @@ interface User {
   user_id: number;
   email: string;
   name: string;
+  is_superuser: boolean;
   weekly_goal: number | null;
   monthly_goal: number | null;
 }

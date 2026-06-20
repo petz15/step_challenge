@@ -33,6 +33,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    is_superuser = Column(Boolean, default=False, nullable=False)
     garmin_email = Column(String, nullable=True)
     garmin_password_enc = Column(Text, nullable=True)
 

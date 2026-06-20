@@ -20,28 +20,28 @@ router = APIRouter(prefix="/api/garmin", tags=["garmin"])
 # Entries with None are intentionally skipped (no meaningful step equivalent).
 GARMIN_TYPE_MAP: dict[str, str | None] = {
     # Running
-    "running":                          "Running, Moderate (10 min/mile)",
-    "trail_running":                    "Running, Moderate (10 min/mile)",
-    "indoor_running":                   "Running, Moderate (10 min/mile)",
-    "treadmill_running":                "Running, Moderate (10 min/mile)",
-    "virtual_run":                      "Running, Moderate (10 min/mile)",
-    "ultra_run":                        "Running, Easy (12 min/mile)",
+    "running":                          "Running, Moderate (10 km/h)",
+    "trail_running":                    "Running, Moderate (10 km/h)",
+    "indoor_running":                   "Running, Moderate (10 km/h)",
+    "treadmill_running":                "Running, Moderate (10 km/h)",
+    "virtual_run":                      "Running, Moderate (10 km/h)",
+    "ultra_run":                        "Running, Easy (8 km/h)",
     # Walking
     "walking":                          "Walking, Moderate",
-    "casual_walking":                   "Walking, Slow (2 mph)",
-    "speed_walking":                    "Walking, Fast (4 mph)",
+    "casual_walking":                   "Walking, Slow (3 km/h)",
+    "speed_walking":                    "Walking, Fast (6 km/h)",
     # Hiking
     "hiking":                           "Hiking",
     "mountaineering":                   "Hiking",
     # Cycling
-    "cycling":                          "Cycling, Moderate (12 mph)",
-    "road_biking":                      "Cycling, Moderate (12 mph)",
-    "gravel_cycling":                   "Cycling, Moderate (12 mph)",
-    "mountain_biking":                  "Cycling, Vigorous (15 mph)",
-    "indoor_cycling":                   "Cycling, Moderate (12 mph)",
-    "virtual_ride":                     "Cycling, Moderate (12 mph)",
-    "bmx":                              "Cycling, Moderate (12 mph)",
-    "recumbent_cycling":                "Cycling, Easy (10 mph)",
+    "cycling":                          "Cycling, Moderate (19 km/h)",
+    "road_biking":                      "Cycling, Moderate (19 km/h)",
+    "gravel_cycling":                   "Cycling, Moderate (19 km/h)",
+    "mountain_biking":                  "Cycling, Vigorous (24 km/h)",
+    "indoor_cycling":                   "Cycling, Moderate (19 km/h)",
+    "virtual_ride":                     "Cycling, Moderate (19 km/h)",
+    "bmx":                              "Cycling, Moderate (19 km/h)",
+    "recumbent_cycling":                "Cycling, Easy (16 km/h)",
     # Swimming
     "swimming":                         "Swimming",
     "open_water_swimming":              "Swimming",
@@ -199,19 +199,11 @@ def garmin_sync(
 
     imported = 0
     skipped = 0
+    warnings: list[str] = []
 
     for act in raw_activities:
         garmin_id = str(act.get("activityId", ""))
         if not garmin_id:
-            skipped += 1
-            continue
-
-        # Skip already-imported activities (activities are immutable once logged)
-        exists = db.query(models.Activity).filter(
-            models.Activity.garmin_activity_id == garmin_id,
-            models.Activity.user_id == current_user.id,
-        ).first()
-        if exists:
             skipped += 1
             continue
 
@@ -233,6 +225,24 @@ def garmin_sync(
         distance_m = act.get("distance") or 0
         distance_km = round(distance_m / 1000, 3) if distance_m > 0 else None
         garmin_steps = act.get("steps") or 0
+
+        # Check if already imported; if so, recalculate only if it has 0 steps
+        # (can happen when a type-name mismatch previously caused conversion to fail)
+        exists = db.query(models.Activity).filter(
+            models.Activity.garmin_activity_id == garmin_id,
+            models.Activity.user_id == current_user.id,
+        ).first()
+        if exists:
+            if exists.step_equivalent_calculated == 0 and exists.manual_steps is None:
+                conv_dur = duration_min if type_key not in STEP_ACTIVITY_KEYS else None
+                conv_dist = distance_km if type_key not in STEP_ACTIVITY_KEYS else None
+                new_steps = calculate_step_equivalent(our_type, conv_dur, conv_dist, None, db)
+                if new_steps > 0:
+                    exists.step_equivalent_calculated = new_steps
+                    imported += 1
+                    continue
+            skipped += 1
+            continue
 
         # Step-based activities (running, walking, hiking): use Garmin's real step count.
         # Everything else (cycling, strength, etc.): convert via duration/distance rules.
@@ -269,9 +279,10 @@ def garmin_sync(
     # and upsert one "Manual Steps" entry per day so re-syncing mid-day updates the count.
     steps_updated = 0
     try:
-        daily_steps_data = client.get_daily_steps(startdate=start_str, enddate=end_str)
-    except Exception:
+        daily_steps_data = client.get_daily_steps(start_str, end_str)
+    except Exception as exc:
         daily_steps_data = []
+        warnings.append(f"Could not fetch daily step totals from Garmin Connect: {exc}")
 
     for day_data in (daily_steps_data or []):
         day_str = day_data.get("calendarDate", "")
@@ -321,7 +332,7 @@ def garmin_sync(
         steps_updated += 1
 
     db.commit()
-    return schemas.GarminSyncResponse(imported=imported, skipped=skipped, steps_updated=steps_updated)
+    return schemas.GarminSyncResponse(imported=imported, skipped=skipped, steps_updated=steps_updated, warnings=warnings)
 
 
 @router.delete("/disconnect")
