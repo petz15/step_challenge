@@ -15,15 +15,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
 
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/";
-    throw new Error("Unauthorized");
-  }
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    if (res.status === 401 && getToken()) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/";
+    }
     throw new Error(err.detail || "Request failed");
   }
 

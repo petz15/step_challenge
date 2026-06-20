@@ -20,7 +20,7 @@ DEFAULT_CONVERSION_RULES = [
 DEFAULT_USERS = [
     {"email": "peter@stepchallenge.local", "name": "Peter", "password": "peter123",
      "weekly_goal": 70000, "monthly_goal": 280000},
-    {"email": "gf@stepchallenge.local", "name": "Anine", "password": "anine123",
+    {"email": "anine@stepchallenge.local", "name": "Anine", "password": "anine123",
      "weekly_goal": 70000, "monthly_goal": 280000},
 ]
 
