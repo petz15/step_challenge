@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:-step-challenge-secret-change-in-prod}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_DAYS: "7"
+    ports:
+      - "8000:8000"
+    # Allows containers to reach the host machine's PostgreSQL via host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
