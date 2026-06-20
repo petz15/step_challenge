@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRule, setSavingRule] = useState<string | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
   const [ruleMsg, setRuleMsg] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -193,6 +194,29 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveAll = async () => {
+    setSavingAll(true);
+    setRuleMsg(null);
+    try {
+      await Promise.all(
+        rules.map((rule) => {
+          const edited = editedRules[rule.activity_type];
+          if (!edited) return Promise.resolve();
+          return api.updateConversionRule(rule.activity_type, {
+            conversion_per_minute: Number(edited.per_minute),
+            conversion_per_km: Number(edited.per_km),
+            step_multiplier: Number(edited.multiplier),
+          });
+        })
+      );
+      setRuleMsg(`All ${rules.length} rules saved and activities recalculated.`);
+    } catch {
+      setRuleMsg("Failed to save some rules.");
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   if (loading || !user) return null;
 
   return (
@@ -329,13 +353,23 @@ export default function SettingsPage() {
         {user.is_superuser && <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-start justify-between mb-1">
             <h2 className="text-lg font-semibold text-gray-900">Conversion Rules</h2>
-            <button
-              type="button"
-              onClick={suggestMultipliers}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium underline-offset-2 hover:underline"
-            >
-              Suggest multipliers from rates
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={suggestMultipliers}
+                className="text-xs text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline"
+              >
+                Suggest multipliers
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={savingAll}
+                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {savingAll ? "Saving…" : "Save All"}
+              </button>
+            </div>
           </div>
           <p className="text-sm text-gray-500 mb-4">
             Changing a rule retroactively recalculates all matching activities. The <strong>step ×</strong> multiplier weights real step counts (running, walking) from Garmin — e.g. set running to 2.0 so each running step counts double.
