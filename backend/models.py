@@ -60,6 +60,18 @@ class Activity(Base):
     user = relationship("User", back_populates="activities")
 
 
+class HealthMetric(Base):
+    __tablename__ = "health_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    metric_type = Column(String, nullable=False)
+    value = Column(Float, nullable=False)
+    source = Column(String, nullable=False, default="garmin_api")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class ConversionRule(Base):
     __tablename__ = "conversion_rules"
 

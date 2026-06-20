@@ -121,4 +121,5 @@ class GarminSyncResponse(BaseModel):
     imported: int
     skipped: int
     steps_updated: int
+    health_synced: int = 0
     warnings: list[str] = []

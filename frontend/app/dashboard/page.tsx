@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, LeaderboardEntry, ActivityResponse } from "@/lib/api";
+import { api, LeaderboardEntry, ActivityResponse, ChallengeRecord, HealthTrends } from "@/lib/api";
 import Nav from "@/components/Nav";
 import LeaderboardTable from "@/components/LeaderboardTable";
 import TrendChart from "@/components/TrendChart";
+import ChallengeRecordCard from "@/components/ChallengeRecord";
+import SparkLine from "@/components/SparkLine";
 
 type Period = "daily" | "weekly" | "monthly";
 
@@ -22,6 +24,8 @@ export default function DashboardPage() {
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [fetching, setFetching] = useState(true);
   const [stats, setStats] = useState<StatsOverview | null>(null);
+  const [challengeRecord, setChallengeRecord] = useState<ChallengeRecord | null>(null);
+  const [healthTrends, setHealthTrends] = useState<HealthTrends | null>(null);
   const [opponentActivities, setOpponentActivities] = useState<ActivityResponse[]>([]);
   const opponentFetched = useRef(false);
 
@@ -57,6 +61,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     api.statsOverview().then(setStats).catch(() => {});
+    api.statsChallengeRecord().then(setChallengeRecord).catch(() => {});
+    api.statsHealth(14).then(setHealthTrends).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -144,6 +150,21 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Challenge Record */}
+        {challengeRecord && challengeRecord.users.length >= 2 && (
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              Head-to-Head Record
+            </h2>
+            <ChallengeRecordCard
+              users={challengeRecord.users}
+              weekly={challengeRecord.weekly}
+              monthly={challengeRecord.monthly}
+              currentUserId={user.user_id}
+            />
+          </div>
+        )}
+
         {/* 8-Week Trend */}
         {stats && trendUsers.length > 0 && (
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -151,6 +172,52 @@ export default function DashboardPage() {
               8-Week Trend
             </h2>
             <TrendChart weeks={stats.weekly_trend} users={trendUsers} />
+          </div>
+        )}
+
+        {/* Health trends */}
+        {healthTrends && Object.keys(healthTrends).length > 0 && (
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Your Health
+            </h2>
+            <p className="text-xs text-gray-400 mb-4">Last 14 days · synced from Garmin</p>
+            <div className="space-y-5 divide-y divide-gray-50">
+              {healthTrends.resting_hr && (
+                <div className="pt-4 first:pt-0">
+                  <SparkLine
+                    data={healthTrends.resting_hr}
+                    label="Resting Heart Rate"
+                    unit="bpm"
+                    color="#ef4444"
+                    minFloor={40}
+                  />
+                </div>
+              )}
+              {healthTrends.sleep_hours && (
+                <div className="pt-4 first:pt-0">
+                  <SparkLine
+                    data={healthTrends.sleep_hours}
+                    label="Sleep"
+                    unit="hrs"
+                    decimals={1}
+                    color="#8b5cf6"
+                    minFloor={0}
+                  />
+                </div>
+              )}
+              {healthTrends.sleep_score && (
+                <div className="pt-4 first:pt-0">
+                  <SparkLine
+                    data={healthTrends.sleep_score}
+                    label="Sleep Score"
+                    unit="/100"
+                    color="#06b6d4"
+                    minFloor={0}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException
@@ -112,6 +112,30 @@ GARMIN_TYPE_MAP: dict[str, str | None] = {
 STEP_ACTIVITY_KEYS = {"running", "trail_running", "indoor_running", "treadmill_running",
                       "virtual_run", "ultra_run", "walking", "casual_walking", "speed_walking",
                       "hiking"}
+
+
+def _upsert_health_metric(
+    db: Session, user_id: int, day: date, metric_type: str, value: float
+) -> None:
+    existing = (
+        db.query(models.HealthMetric)
+        .filter(
+            models.HealthMetric.user_id == user_id,
+            models.HealthMetric.date == day,
+            models.HealthMetric.metric_type == metric_type,
+        )
+        .first()
+    )
+    if existing:
+        existing.value = value
+    else:
+        db.add(models.HealthMetric(
+            user_id=user_id,
+            date=day,
+            metric_type=metric_type,
+            value=value,
+            source="garmin_api",
+        ))
 
 
 def _fernet() -> Fernet:
@@ -331,8 +355,60 @@ def garmin_sync(
             ))
         steps_updated += 1
 
+    # --- Health data (resting HR, sleep) ---
+    # Cap to 7 days to keep the sync fast; focus on recent/missing data.
+    health_synced = 0
+    health_end = min(body.end_date, date.today())
+    health_start = max(body.start_date, health_end - timedelta(days=6))
+    current_day = health_start
+    while current_day <= health_end:
+        day_str = current_day.isoformat()
+
+        # Resting heart rate (from daily heart rate summary)
+        try:
+            hr_data = client.get_heart_rates(day_str)
+            if isinstance(hr_data, dict):
+                rhr = hr_data.get("restingHeartRate")
+                if rhr and int(rhr) > 20:
+                    _upsert_health_metric(db, current_user.id, current_day, "resting_hr", float(rhr))
+                    health_synced += 1
+        except Exception:
+            pass
+
+        # Sleep duration
+        try:
+            sleep_resp = client.get_sleep_data(day_str)
+            if isinstance(sleep_resp, dict):
+                dto = sleep_resp.get("dailySleepDTO") or {}
+                sleep_secs = dto.get("sleepTimeSeconds") or 0
+                if sleep_secs >= 3600:
+                    _upsert_health_metric(
+                        db, current_user.id, current_day, "sleep_hours",
+                        round(sleep_secs / 3600, 1),
+                    )
+                    health_synced += 1
+                # Sleep score (0-100 if available)
+                scores = dto.get("sleepScores") or {}
+                if isinstance(scores, dict):
+                    overall = scores.get("overall") or {}
+                    score_val = overall.get("value") if isinstance(overall, dict) else overall
+                    if score_val and int(score_val) > 0:
+                        _upsert_health_metric(
+                            db, current_user.id, current_day, "sleep_score", float(score_val)
+                        )
+        except Exception:
+            pass
+
+        current_day += timedelta(days=1)
+
     db.commit()
-    return schemas.GarminSyncResponse(imported=imported, skipped=skipped, steps_updated=steps_updated, warnings=warnings)
+    return schemas.GarminSyncResponse(
+        imported=imported,
+        skipped=skipped,
+        steps_updated=steps_updated,
+        health_synced=health_synced,
+        warnings=warnings,
+    )
 
 
 @router.delete("/disconnect")

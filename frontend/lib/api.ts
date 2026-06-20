@@ -75,7 +75,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   garminSync: (start_date: string, end_date: string) =>
-    request<{ imported: number; skipped: number; steps_updated: number; warnings: string[] }>("/api/garmin/sync", {
+    request<{ imported: number; skipped: number; steps_updated: number; health_synced: number; warnings: string[] }>("/api/garmin/sync", {
       method: "POST",
       body: JSON.stringify({ start_date, end_date }),
     }),
@@ -88,6 +88,10 @@ export const api = {
       streaks: { user_id: number; name: string; streak: number }[];
       weekly_trend: { week_start: string; totals: Record<string, number> }[];
     }>("/api/stats/overview"),
+  statsChallengeRecord: () =>
+    request<ChallengeRecord>("/api/stats/challenge-record"),
+  statsHealth: (days = 14) =>
+    request<HealthTrends>(`/api/stats/health?days=${days}`),
 
   // Settings
   getConversionRules: () => request<ConversionRule[]>("/api/settings/conversion-rules"),
@@ -126,6 +130,27 @@ export interface LeaderboardEntry {
   total_steps: number;
   goal: number | null;
   goal_progress: number | null;
+}
+
+export interface HealthDataPoint {
+  date: string;
+  value: number;
+}
+
+export type HealthTrends = Record<string, HealthDataPoint[]>;
+
+export interface ChallengeRecord {
+  users: { user_id: number; name: string }[];
+  weekly: {
+    history: { period_start: string; winner_user_id: number | null; scores: Record<string, number> }[];
+    wins: Record<string, number>;
+    ties: number;
+  };
+  monthly: {
+    history: { period_start: string; winner_user_id: number | null; scores: Record<string, number> }[];
+    wins: Record<string, number>;
+    ties: number;
+  };
 }
 
 export interface ConversionRule {
