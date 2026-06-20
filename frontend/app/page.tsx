@@ -77,7 +77,7 @@ export default function LoginPage() {
         <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500 space-y-1">
           <p className="font-medium text-gray-600">Test accounts:</p>
           <p>peter@stepchallenge.local / peter123</p>
-          <p>gf@stepchallenge.local / gf123</p>
+          <p>anine@stepchallenge.local / anine123</p>
         </div>
       </div>
     </div>

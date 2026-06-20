@@ -18,17 +18,17 @@ CREATE DATABASE step_challenge;
 ### 2. Configure environment variables
 
 ```bash
-cp app.env.example app.env
+cp .env.example .env
 ```
 
-Fill in your actual Postgres credentials — passwords with `$` or other special characters are fine as-is, no escaping needed:
+Fill in your actual Postgres credentials. If your password contains `$` or other special characters, wrap it in **single quotes**:
 
 ```dotenv
 POSTGRES_HOST=host.docker.internal
 POSTGRES_PORT=5432
 POSTGRES_DB=step_challenge
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your$password!asis
+POSTGRES_PASSWORD='p@$$word'
 
 JWT_SECRET=some-long-random-string
 ```
