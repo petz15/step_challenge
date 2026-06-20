@@ -17,16 +17,19 @@ CREATE DATABASE step_challenge;
 
 ### 2. Configure environment variables
 
-In the project root, copy the example file and fill in your Postgres credentials:
-
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Fill in your actual Postgres credentials — passwords with `$` or other special characters are fine as-is:
 
 ```dotenv
-DATABASE_URL=postgresql+psycopg://postgres:yourpassword@host.docker.internal:5432/step_challenge
+POSTGRES_HOST=host.docker.internal
+POSTGRES_PORT=5432
+POSTGRES_DB=step_challenge
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your$password!asis
+
 JWT_SECRET=some-long-random-string
 ```
 
