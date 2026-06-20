@@ -120,6 +120,28 @@ export default function SettingsPage() {
     }
   };
 
+  const suggestMultipliers = () => {
+    const baseline = rules.find((r) => r.activity_type === "Walking, Moderate");
+    const baseRate = baseline ? baseline.conversion_per_minute : null;
+    if (!baseRate || baseRate <= 0) return;
+    setEditedRules((prev) => {
+      const next = { ...prev };
+      rules.forEach((rule) => {
+        if (rule.conversion_per_minute > 0) {
+          const suggested = Math.round((rule.conversion_per_minute / baseRate) * 100) / 100;
+          next[rule.activity_type] = {
+            ...(next[rule.activity_type] ?? {
+              per_minute: rule.conversion_per_minute.toString(),
+              per_km: rule.conversion_per_km.toString(),
+            }),
+            multiplier: suggested.toString(),
+          };
+        }
+      });
+      return next;
+    });
+  };
+
   const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -305,9 +327,18 @@ export default function SettingsPage() {
 
         {/* Conversion Rules — superuser only */}
         {user.is_superuser && <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Conversion Rules</h2>
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-lg font-semibold text-gray-900">Conversion Rules</h2>
+            <button
+              type="button"
+              onClick={suggestMultipliers}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium underline-offset-2 hover:underline"
+            >
+              Suggest multipliers from rates
+            </button>
+          </div>
           <p className="text-sm text-gray-500 mb-4">
-            Changing a rule retroactively recalculates all matching activities.
+            Changing a rule retroactively recalculates all matching activities. The <strong>step ×</strong> multiplier weights real step counts (running, walking) from Garmin — e.g. set running to 2.0 so each running step counts double.
           </p>
 
           {/* Add custom activity */}
