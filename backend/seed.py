@@ -30,12 +30,15 @@ def seed(reset: bool = False):
     if reset:
         from alembic.config import Config
         from alembic import command as alembic_cmd
+        from database import engine, Base
         import os
         alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
         alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
-        print("Dropping all tables via Alembic downgrade...")
-        alembic_cmd.downgrade(alembic_cfg, "base")
-        print("Recreating tables via Alembic upgrade...")
+        print("Resetting Alembic version stamp...")
+        alembic_cmd.stamp(alembic_cfg, "base")
+        print("Dropping all tables...")
+        Base.metadata.drop_all(bind=engine)
+        print("Recreating tables via Alembic...")
         alembic_cmd.upgrade(alembic_cfg, "head")
 
     db = SessionLocal()
