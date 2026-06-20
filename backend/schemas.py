@@ -108,6 +108,7 @@ class UserSettingsUpdate(BaseModel):
 class GarminConnectRequest(BaseModel):
     email: str
     password: str
+    mfa_code: Optional[str] = None
 
 
 class GarminSyncRequest(BaseModel):

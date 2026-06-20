@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [garminEmail, setGarminEmail] = useState<string | null>(null);
   const [garminFormEmail, setGarminFormEmail] = useState("");
   const [garminFormPassword, setGarminFormPassword] = useState("");
+  const [garminFormMfa, setGarminFormMfa] = useState("");
   const [garminConnecting, setGarminConnecting] = useState(false);
   const [garminMsg, setGarminMsg] = useState("");
   const [garminSyncing, setGarminSyncing] = useState(false);
@@ -71,10 +72,11 @@ export default function SettingsPage() {
     setGarminConnecting(true);
     setGarminMsg("");
     try {
-      const res = await api.garminConnect(garminFormEmail.trim(), garminFormPassword);
+      const res = await api.garminConnect(garminFormEmail.trim(), garminFormPassword, garminFormMfa.trim() || undefined);
       setGarminConnected(res.connected);
       setGarminEmail(res.email);
       setGarminFormPassword("");
+      setGarminFormMfa("");
       setGarminMsg("Connected to Garmin Connect!");
     } catch (err: unknown) {
       setGarminMsg(err instanceof Error ? err.message : "Failed to connect");
@@ -330,6 +332,21 @@ export default function SettingsPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  2FA Code <span className="text-gray-400 font-normal">(only if your account has 2-factor auth)</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={garminFormMfa}
+                  onChange={(e) => setGarminFormMfa(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
               <div className="flex items-center gap-3">
                 <button

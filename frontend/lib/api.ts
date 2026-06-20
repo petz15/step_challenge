@@ -69,10 +69,10 @@ export const api = {
   // Garmin
   garminStatus: () =>
     request<{ connected: boolean; email: string | null }>("/api/garmin/status"),
-  garminConnect: (email: string, password: string) =>
+  garminConnect: (email: string, password: string, mfa_code?: string) =>
     request<{ connected: boolean; email: string | null }>("/api/garmin/connect", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(mfa_code ? { mfa_code } : {}) }),
     }),
   garminSync: (start_date: string, end_date: string) =>
     request<{ imported: number; skipped: number; steps_updated: number; health_synced: number; warnings: string[] }>("/api/garmin/sync", {

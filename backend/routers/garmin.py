@@ -152,22 +152,29 @@ def _decrypt(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
 
 
-def _garmin_client(email: str, password: str):
-    """Authenticate with Garmin Connect and return a logged-in client."""
+def _garmin_client(email: str, password: str, mfa_code: str | None = None):
+    """Authenticate with Garmin Connect and return a logged-in client.
+
+    Pass mfa_code when the account has 2FA enabled — the library calls
+    prompt_mfa() to retrieve it instead of blocking on stdin.
+    """
     try:
         import garminconnect
     except ImportError:
         raise HTTPException(status_code=500, detail="garminconnect library not installed")
 
+    prompt_mfa = (lambda: mfa_code) if mfa_code else None
+
     try:
-        client = garminconnect.Garmin(email, password)
+        client = garminconnect.Garmin(email, password, prompt_mfa=prompt_mfa)
         client.login()
         return client
     except garminconnect.GarminConnectAuthenticationError as exc:
         raise HTTPException(
             status_code=401,
             detail=f"Garmin authentication failed: {exc}. "
-                   "Check credentials or disable 2FA on your Garmin Connect account.",
+                   "Check your credentials. If your account has 2FA, enter the current "
+                   "authenticator code in the MFA field.",
         )
     except garminconnect.GarminConnectTooManyRequestsError:
         raise HTTPException(status_code=429, detail="Garmin Connect rate limit reached. Try again later.")
@@ -182,7 +189,7 @@ def garmin_connect(
     db: Session = Depends(get_db),
 ):
     """Save Garmin credentials after verifying they work."""
-    _garmin_client(body.email, body.password)  # raises on bad creds
+    _garmin_client(body.email, body.password, body.mfa_code)  # raises on bad creds
     current_user.garmin_email = body.email
     current_user.garmin_password_enc = _encrypt(body.password)
     db.commit()
