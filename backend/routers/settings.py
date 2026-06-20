@@ -61,6 +61,8 @@ def update_conversion_rule(
         rule.conversion_per_minute = body.conversion_per_minute
     if body.conversion_per_km is not None:
         rule.conversion_per_km = body.conversion_per_km
+    if body.step_multiplier is not None:
+        rule.step_multiplier = body.step_multiplier
 
     db.flush()
 

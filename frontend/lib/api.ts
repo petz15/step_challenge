@@ -95,9 +95,9 @@ export const api = {
 
   // Settings
   getConversionRules: () => request<ConversionRule[]>("/api/settings/conversion-rules"),
-  createConversionRule: (data: { activity_type: string; conversion_per_minute: number; conversion_per_km: number }) =>
+  createConversionRule: (data: { activity_type: string; conversion_per_minute: number; conversion_per_km: number; step_multiplier?: number }) =>
     request<ConversionRule>("/api/settings/conversion-rules", { method: "POST", body: JSON.stringify(data) }),
-  updateConversionRule: (activityType: string, data: { conversion_per_minute?: number; conversion_per_km?: number }) =>
+  updateConversionRule: (activityType: string, data: { conversion_per_minute?: number; conversion_per_km?: number; step_multiplier?: number }) =>
     request<{ success: boolean; message: string }>(`/api/settings/conversion-rules/${encodeURIComponent(activityType)}`, {
       method: "PUT",
       body: JSON.stringify(data),
@@ -157,4 +157,5 @@ export interface ConversionRule {
   activity_type: string;
   conversion_per_minute: number;
   conversion_per_km: number;
+  step_multiplier: number;
 }

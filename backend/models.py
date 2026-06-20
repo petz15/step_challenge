@@ -79,5 +79,6 @@ class ConversionRule(Base):
     activity_type = Column(String, unique=True, nullable=False, index=True)
     conversion_per_minute = Column(Float, nullable=False, default=0.0)
     conversion_per_km = Column(Float, nullable=False, default=0.0)
+    step_multiplier = Column(Float, nullable=False, default=1.0)
     is_default = Column(Boolean, default=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

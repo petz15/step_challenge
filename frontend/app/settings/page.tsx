@@ -10,7 +10,7 @@ export default function SettingsPage() {
   const { user, loading, refreshUser } = useAuth();
   const router = useRouter();
   const [rules, setRules] = useState<ConversionRule[]>([]);
-  const [editedRules, setEditedRules] = useState<Record<string, { per_minute: string; per_km: string }>>({});
+  const [editedRules, setEditedRules] = useState<Record<string, { per_minute: string; per_km: string; multiplier: string }>>({});
   const [name, setName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingRule, setSavingRule] = useState<string | null>(null);
@@ -53,6 +53,7 @@ export default function SettingsPage() {
           init[rule.activity_type] = {
             per_minute: rule.conversion_per_minute.toString(),
             per_km: rule.conversion_per_km.toString(),
+            multiplier: rule.step_multiplier.toString(),
           };
         });
         setEditedRules(init);
@@ -129,11 +130,16 @@ export default function SettingsPage() {
         activity_type: newName.trim(),
         conversion_per_minute: Number(newPerMin) || 0,
         conversion_per_km: Number(newPerKm) || 0,
+        step_multiplier: 1.0,
       });
       setRules((prev) => [...prev, rule].sort((a, b) => a.activity_type.localeCompare(b.activity_type)));
       setEditedRules((prev) => ({
         ...prev,
-        [rule.activity_type]: { per_minute: rule.conversion_per_minute.toString(), per_km: rule.conversion_per_km.toString() },
+        [rule.activity_type]: {
+          per_minute: rule.conversion_per_minute.toString(),
+          per_km: rule.conversion_per_km.toString(),
+          multiplier: rule.step_multiplier.toString(),
+        },
       }));
       setNewName("");
       setNewPerMin("");
@@ -155,6 +161,7 @@ export default function SettingsPage() {
       const res = await api.updateConversionRule(activityType, {
         conversion_per_minute: Number(edited.per_minute),
         conversion_per_km: Number(edited.per_km),
+        step_multiplier: Number(edited.multiplier),
       });
       setRuleMsg(res.message);
     } catch {
@@ -350,47 +357,71 @@ export default function SettingsPage() {
               const edited = editedRules[rule.activity_type] ?? {
                 per_minute: rule.conversion_per_minute.toString(),
                 per_km: rule.conversion_per_km.toString(),
+                multiplier: rule.step_multiplier.toString(),
               };
               return (
-                <div key={rule.activity_type} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <span className="text-sm font-medium text-gray-700 w-32 shrink-0">{rule.activity_type}</span>
-                  <div className="flex items-center gap-2 flex-1">
-                    <label className="text-xs text-gray-500 shrink-0">per min</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={edited.per_minute}
-                      onChange={(e) =>
-                        setEditedRules((prev) => ({
-                          ...prev,
-                          [rule.activity_type]: { ...edited, per_minute: e.target.value },
-                        }))
-                      }
-                      className="w-20 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                    <label className="text-xs text-gray-500 shrink-0">per km</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={edited.per_km}
-                      onChange={(e) =>
-                        setEditedRules((prev) => ({
-                          ...prev,
-                          [rule.activity_type]: { ...edited, per_km: e.target.value },
-                        }))
-                      }
-                      className="w-20 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
+                <div key={rule.activity_type} className="py-3 border-b border-gray-100 last:border-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">{rule.activity_type}</span>
+                    <button
+                      onClick={() => handleSaveRule(rule.activity_type)}
+                      disabled={savingRule === rule.activity_type}
+                      className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                    >
+                      {savingRule === rule.activity_type ? "Saving…" : "Save"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleSaveRule(rule.activity_type)}
-                    disabled={savingRule === rule.activity_type}
-                    className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors shrink-0"
-                  >
-                    {savingRule === rule.activity_type ? "Saving…" : "Save"}
-                  </button>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-gray-500 w-14 shrink-0">per min</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={edited.per_minute}
+                        onChange={(e) =>
+                          setEditedRules((prev) => ({
+                            ...prev,
+                            [rule.activity_type]: { ...edited, per_minute: e.target.value },
+                          }))
+                        }
+                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-gray-500 w-10 shrink-0">per km</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={edited.per_km}
+                        onChange={(e) =>
+                          setEditedRules((prev) => ({
+                            ...prev,
+                            [rule.activity_type]: { ...edited, per_km: e.target.value },
+                          }))
+                        }
+                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-gray-500 shrink-0">step ×</label>
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="10"
+                        step="0.05"
+                        value={edited.multiplier}
+                        onChange={(e) =>
+                          setEditedRules((prev) => ({
+                            ...prev,
+                            [rule.activity_type]: { ...edited, multiplier: e.target.value },
+                          }))
+                        }
+                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               );
             })}

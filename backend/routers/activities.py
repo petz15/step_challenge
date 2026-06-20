@@ -15,11 +15,12 @@ def calculate_step_equivalent(
     manual_steps: Optional[int],
     db: Session,
 ) -> int:
-    if manual_steps:
-        return manual_steps
     rule = db.query(models.ConversionRule).filter(
         models.ConversionRule.activity_type == activity_type
     ).first()
+    multiplier = float(rule.step_multiplier) if rule and rule.step_multiplier is not None else 1.0
+    if manual_steps:
+        return int(round(manual_steps * multiplier))
     if not rule:
         return 0
     if duration_minutes is not None and duration_minutes > 0:

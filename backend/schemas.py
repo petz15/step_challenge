@@ -79,6 +79,7 @@ class ConversionRuleResponse(BaseModel):
     activity_type: str
     conversion_per_minute: float
     conversion_per_km: float
+    step_multiplier: float = 1.0
 
     class Config:
         from_attributes = True
@@ -88,11 +89,13 @@ class ConversionRuleCreate(BaseModel):
     activity_type: str
     conversion_per_minute: float
     conversion_per_km: float = 0.0
+    step_multiplier: float = 1.0
 
 
 class ConversionRuleUpdate(BaseModel):
     conversion_per_minute: Optional[float] = None
     conversion_per_km: Optional[float] = None
+    step_multiplier: Optional[float] = None
 
 
 class UserSettingsUpdate(BaseModel):
