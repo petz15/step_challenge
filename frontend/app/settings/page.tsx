@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [garminFormPassword, setGarminFormPassword] = useState("");
   const [garminFormMfa, setGarminFormMfa] = useState("");
   const [garminMfaRequired, setGarminMfaRequired] = useState(false);
+  const [garminMfaSessionId, setGarminMfaSessionId] = useState<string | null>(null);
   const [garminConnecting, setGarminConnecting] = useState(false);
   const [garminMsg, setGarminMsg] = useState("");
   const [garminSyncing, setGarminSyncing] = useState(false);
@@ -73,21 +74,25 @@ export default function SettingsPage() {
     setGarminConnecting(true);
     setGarminMsg("");
     try {
-      const res = await api.garminConnect(garminFormEmail.trim(), garminFormPassword, garminFormMfa.trim() || undefined);
-      setGarminConnected(res.connected);
-      setGarminEmail(res.email);
-      setGarminFormPassword("");
-      setGarminFormMfa("");
-      setGarminMfaRequired(false);
-      setGarminMsg("Connected to Garmin Connect!");
+      const res = garminMfaRequired && garminMfaSessionId
+        ? await api.garminConnect({ mfa_session_id: garminMfaSessionId, mfa_code: garminFormMfa.trim() })
+        : await api.garminConnect({ email: garminFormEmail.trim(), password: garminFormPassword });
+
+      if (res.mfa_session_id) {
+        setGarminMfaRequired(true);
+        setGarminMfaSessionId(res.mfa_session_id);
+      } else {
+        setGarminConnected(res.connected);
+        setGarminEmail(res.email);
+        setGarminFormPassword("");
+        setGarminFormMfa("");
+        setGarminMfaRequired(false);
+        setGarminMfaSessionId(null);
+        setGarminMsg("Connected to Garmin Connect!");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to connect";
-      if (msg === "mfa_required") {
-        setGarminMfaRequired(true);
-        setGarminMsg("");
-      } else {
-        setGarminMsg(msg);
-      }
+      setGarminMsg(msg);
     } finally {
       setGarminConnecting(false);
     }
@@ -111,11 +116,7 @@ export default function SettingsPage() {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Sync failed";
-      setGarminSyncMsg(
-        msg === "mfa_required"
-          ? "Garmin requires 2FA. Disconnect and reconnect below with your authenticator code."
-          : msg
-      );
+      setGarminSyncMsg(msg);
     } finally {
       setGarminSyncing(false);
     }
@@ -271,7 +272,7 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Garmin Sync</h2>
           <p className="text-sm text-gray-500 mb-4">
             Import activities directly from Garmin Connect. Duplicates are skipped automatically.
-            If your account has 2-factor authentication enabled, disable it on Garmin Connect first.
+            Accounts with 2-factor authentication are supported.
           </p>
 
           {garminConnected ? (
@@ -349,7 +350,7 @@ export default function SettingsPage() {
               {garminMfaRequired && (
                 <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
                   <p className="text-sm font-medium text-amber-800 mb-2">
-                    Garmin sent a verification code to your email address. Enter it below to complete the connection.
+                    Garmin requires a verification code. Check your email or authenticator app and enter it below.
                   </p>
                   <input
                     type="text"

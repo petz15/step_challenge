@@ -106,8 +106,9 @@ class UserSettingsUpdate(BaseModel):
 
 # Garmin
 class GarminConnectRequest(BaseModel):
-    email: str
-    password: str
+    email: Optional[str] = None
+    password: Optional[str] = None
+    mfa_session_id: Optional[str] = None
     mfa_code: Optional[str] = None
 
 
@@ -119,6 +120,7 @@ class GarminSyncRequest(BaseModel):
 class GarminStatusResponse(BaseModel):
     connected: bool
     email: Optional[str] = None
+    mfa_session_id: Optional[str] = None
 
 
 class GarminSyncResponse(BaseModel):

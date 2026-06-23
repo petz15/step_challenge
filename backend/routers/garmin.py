@@ -3,7 +3,9 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import date, timedelta
+import threading
+import uuid
+from datetime import date, datetime, timedelta, timezone
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException
@@ -154,10 +156,6 @@ def _decrypt(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
 
 
-class _MfaRequiredError(Exception):
-    """Raised from the prompt_mfa callback when no code was supplied yet."""
-
-
 def _dump_tokens(client) -> str:
     """Serialize garth session tokens to an encrypted-ready JSON string."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -186,34 +184,145 @@ def _garmin_client_from_tokens(encrypted_tokens: str) -> object:
     return client
 
 
-def _garmin_fresh_login(email: str, password: str, mfa_code: str | None = None) -> object:
-    """Full credential login with optional MFA.
+# ---------------------------------------------------------------------------
+# Thread-based two-phase MFA login
+# ---------------------------------------------------------------------------
 
-    If Garmin requests MFA and no code was provided, raises HTTP 400 "mfa_required"
-    so the frontend can show the code input and resubmit.
+_pending_mfa_sessions: dict[str, dict] = {}
+_pending_mfa_lock = threading.Lock()
+
+
+def _cleanup_expired_sessions() -> None:
+    """Remove sessions older than 10 minutes, unblocking their background threads."""
+    cutoff = datetime.now(timezone.utc).timestamp() - 600
+    with _pending_mfa_lock:
+        expired = [k for k, v in _pending_mfa_sessions.items() if v["created"] < cutoff]
+        for k in expired:
+            v = _pending_mfa_sessions.pop(k)
+            v["code_provided"].set()  # wake the waiting thread so it exits cleanly
+
+
+def _raise_garmin_exc(exc: Exception) -> None:
+    try:
+        import garminconnect
+    except ImportError:
+        raise HTTPException(status_code=500, detail="garminconnect library not installed")
+    if isinstance(exc, garminconnect.GarminConnectAuthenticationError):
+        raise HTTPException(status_code=401, detail=f"Garmin authentication failed: {exc}")
+    if isinstance(exc, garminconnect.GarminConnectTooManyRequestsError):
+        raise HTTPException(status_code=429, detail="Garmin Connect rate limit reached. Try again later.")
+    raise HTTPException(status_code=502, detail=f"Could not reach Garmin Connect: {exc}")
+
+
+def _garmin_start_login(email: str, password: str) -> tuple[object | None, str | None]:
+    """Start a Garmin login in a background thread.
+
+    Returns (client, None) if login succeeds without MFA.
+    Returns (None, session_id) if MFA is required — the session stays alive in
+    _pending_mfa_sessions until _garmin_complete_mfa() provides the code.
+    Raises HTTPException on auth failure.
     """
     try:
         import garminconnect
     except ImportError:
         raise HTTPException(status_code=500, detail="garminconnect library not installed")
 
-    def _prompt_mfa() -> str:
-        if mfa_code:
-            return mfa_code
-        raise _MfaRequiredError()
+    _cleanup_expired_sessions()
 
-    try:
-        client = garminconnect.Garmin(email, password, prompt_mfa=_prompt_mfa)
-        client.login()
-        return client
-    except _MfaRequiredError:
-        raise HTTPException(status_code=400, detail="mfa_required")
-    except garminconnect.GarminConnectAuthenticationError as exc:
-        raise HTTPException(status_code=401, detail=f"Garmin authentication failed: {exc}")
-    except garminconnect.GarminConnectTooManyRequestsError:
-        raise HTTPException(status_code=429, detail="Garmin Connect rate limit reached. Try again later.")
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Could not reach Garmin Connect: {exc}")
+    action = threading.Event()       # set when MFA is triggered OR login finishes
+    code_provided = threading.Event()
+    login_done = threading.Event()
+
+    session: dict = {
+        "created": datetime.now(timezone.utc).timestamp(),
+        "email": email,
+        "password": password,
+        "action": action,
+        "code_provided": code_provided,
+        "login_done": login_done,
+        "mfa_triggered": False,
+        "mfa_code": None,
+        "client": None,
+        "error": None,
+    }
+
+    def _prompt_mfa() -> str:
+        session["mfa_triggered"] = True
+        action.set()                    # wake the main thread
+        code_provided.wait(timeout=300) # wait up to 5 min for the user to enter the code
+        return session["mfa_code"] or ""
+
+    def _do_login() -> None:
+        try:
+            client = garminconnect.Garmin(email, password, prompt_mfa=_prompt_mfa)
+            client.login()
+            session["client"] = client
+        except Exception as exc:
+            session["error"] = exc
+        finally:
+            login_done.set()
+            action.set()  # wake main thread if no MFA was needed
+
+    threading.Thread(target=_do_login, daemon=True).start()
+
+    action.wait(timeout=30)
+
+    if session["client"] is not None:
+        return session["client"], None
+
+    if session["error"] is not None:
+        _raise_garmin_exc(session["error"])
+
+    if not action.is_set():
+        raise HTTPException(status_code=504, detail="Garmin Connect did not respond. Try again later.")
+
+    if login_done.is_set():
+        if session["error"]:
+            _raise_garmin_exc(session["error"])
+        raise HTTPException(status_code=502, detail="Unexpected login state. Try again.")
+
+    # MFA is pending — store session so the second request can resume it
+    session_id = str(uuid.uuid4())
+    with _pending_mfa_lock:
+        _pending_mfa_sessions[session_id] = session
+    return None, session_id
+
+
+def _garmin_complete_mfa(session_id: str, mfa_code: str) -> tuple[object, str, str]:
+    """Unblock the waiting login thread with the user-supplied MFA code.
+
+    Returns (client, email, password) on success.
+    Raises HTTPException on failure.
+    """
+    with _pending_mfa_lock:
+        session = _pending_mfa_sessions.pop(session_id, None)
+
+    if session is None:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA session expired or not found. Please start the connection again.",
+        )
+
+    session["mfa_code"] = mfa_code
+    session["code_provided"].set()  # unblock _prompt_mfa in the background thread
+
+    if not session["login_done"].wait(timeout=20):
+        raise HTTPException(status_code=504, detail="Login timed out after MFA. Try again.")
+
+    if session["client"] is not None:
+        return session["client"], session["email"], session["password"]
+
+    exc = session.get("error")
+    if exc is not None:
+        try:
+            import garminconnect
+        except ImportError:
+            raise HTTPException(status_code=500, detail="garminconnect library not installed")
+        if isinstance(exc, garminconnect.GarminConnectAuthenticationError):
+            raise HTTPException(status_code=401, detail="Invalid MFA code or credentials. Please try again.")
+        _raise_garmin_exc(exc)
+
+    raise HTTPException(status_code=502, detail="Login failed. Try again.")
 
 
 @router.post("/connect", response_model=schemas.GarminStatusResponse)
@@ -222,8 +331,34 @@ def garmin_connect(
     current_user: models.User = Depends(auth_utils.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Full credential login — saves OAuth tokens so future syncs skip re-authentication."""
-    client = _garmin_fresh_login(body.email, body.password, body.mfa_code)
+    """Two-phase Garmin login.
+
+    Phase 1 (email + password): starts login in a background thread.
+      - If MFA is not needed, returns connected=True immediately.
+      - If MFA is needed, returns connected=False with an mfa_session_id.
+
+    Phase 2 (mfa_session_id + mfa_code): resumes the waiting thread with the
+      user-supplied code and completes the login.
+    """
+    if body.mfa_session_id and body.mfa_code:
+        # Phase 2: complete MFA
+        client, email, password = _garmin_complete_mfa(body.mfa_session_id, body.mfa_code)
+        current_user.garmin_email = email
+        current_user.garmin_password_enc = _encrypt(password)
+        current_user.garmin_tokens_enc = _encrypt(_dump_tokens(client))
+        db.commit()
+        return schemas.GarminStatusResponse(connected=True, email=email)
+
+    # Phase 1: start login
+    if not body.email or not body.password:
+        raise HTTPException(status_code=422, detail="email and password are required")
+
+    client, session_id = _garmin_start_login(body.email, body.password)
+
+    if session_id is not None:
+        # MFA required — return session_id so the frontend can submit the code
+        return schemas.GarminStatusResponse(connected=False, mfa_session_id=session_id)
+
     current_user.garmin_email = body.email
     current_user.garmin_password_enc = _encrypt(body.password)
     current_user.garmin_tokens_enc = _encrypt(_dump_tokens(client))
@@ -268,7 +403,17 @@ def garmin_sync(
                 detail="Garmin session expired. Go to Settings → Garmin Sync to reconnect.",
             )
         password = _decrypt(current_user.garmin_password_enc)
-        client = _garmin_fresh_login(current_user.garmin_email, password)
+        client, session_id = _garmin_start_login(current_user.garmin_email, password)
+        if session_id is not None:
+            # MFA is required but we can't prompt interactively during sync — cancel and redirect.
+            with _pending_mfa_lock:
+                pending = _pending_mfa_sessions.pop(session_id, None)
+            if pending:
+                pending["code_provided"].set()
+            raise HTTPException(
+                status_code=400,
+                detail="Garmin session expired and your account requires MFA. Go to Settings → Garmin Sync to reconnect.",
+            )
         try:
             current_user.garmin_tokens_enc = _encrypt(_dump_tokens(client))
             db.commit()
